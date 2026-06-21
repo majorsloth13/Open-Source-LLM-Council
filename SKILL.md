@@ -19,18 +19,13 @@ Trigger whenever the user mentions:
 
 This skill runs entirely through ONE pre-written script. You do not write or improvise any
 networking/orchestration code yourself — that was the source of every previous failure.
-Your job is two tool calls, full stop: write the script, then run it directly in the
-foreground. Never use a background/async marker for either step — the user needs to see
-each stage stream into the chat as it happens.
+Your job is two tool calls, full stop.
 
-**Step 1 — write the script.** Use your `bash` tool with a heredoc. Do NOT use a fenced
-`python` block for this step (a `python` block gets *executed*, not saved — pasting the
-script into one just runs it transiently and writes nothing to disk). Do NOT invent a
-command called `write_file` — it does not exist on this platform. Use exactly this form,
-overwriting the file every run:
+**Step 1 — write the script.** Use your `python` tool (or file-write tool if available) to
+write the exact contents below to `/tmp/council_pipeline.py`, overwriting it if it already
+exists. Do this every run — it's cheap and removes any doubt about whether it's current.
 
-```bash
-cat > /tmp/council_pipeline.py << 'PYEOF'
+```python
 #!/usr/bin/env python3
 """
 council_pipeline.py - deterministic LLM-council pipeline against local Ollama.
@@ -145,26 +140,28 @@ def main():
 
 if __name__ == "__main__":
     main()
-PYEOF
-echo "script written"
 ```
 
-**Step 2 — run it directly, in the foreground.** A single plain `bash` tool call —
-NOT wrapped in `subprocess.run`, NOT prefixed with `#!bg` or any background marker. Running
-it directly like this means each stage's output streams into the visible chat as the script
-produces it, instead of all appearing at once at the end:
+**Step 2 — run it.** One more tool call:
 
-```bash
-python3 /tmp/council_pipeline.py "<<THE FULL QUESTION TEXT>>" "<<default OR diverse>>"
+```python
+import subprocess
+result = subprocess.run(
+    ["python3", "/tmp/council_pipeline.py", "<<THE FULL QUESTION TEXT>>", "<<default OR diverse>>"],
+    capture_output=True, text=True, timeout=600
+)
+print(result.stdout[-6000:])
+if result.returncode != 0:
+    print("STDERR:", result.stderr[-2000:])
 ```
 
-Use `"diverse"` as the second argument only if the user asked for diverse/cross-architecture
+Use `"diverse"` as the third argument only if the user asked for diverse/cross-architecture
 mode; otherwise use `"default"`.
 
 That's it. The script handles all five members, the blind review, and the chairman synthesis
 internally and prints clearly-labeled sections (`=== STAGE 1 ===`, `=== STAGE 2 ===`,
-`=== FINAL ANSWER ===`) as it goes. You don't need to parse or re-implement any of that —
-just read what it printed once it finishes.
+`=== FINAL ANSWER ===`). You don't need to parse or re-implement any of that — just read what
+it printed.
 
 ## Output (respect the anti-fluff rules)
 Take the text after `=== FINAL ANSWER ===` and present it as the answer, in your own words
@@ -179,17 +176,12 @@ papering over it.
 - Do not write your own version of the networking code. Use the script verbatim. Every prior
   failure of this skill came from the model improvising HTTP calls live instead of running a
   fixed script.
-- Do not paste the script into a fenced `python` block expecting that to save it — it will
-  just execute and do nothing persistent. Use the bash heredoc in Step 1.
-- Never use `#!bg`, `subprocess.run` with captured output, or any other background/buffering
-  mechanism for Step 2. The user wants to see each stage live.
 - Do not claim you "can't invoke other models due to environment constraints" — this is false.
   If you're about to write that sentence, stop and run the script instead.
-- If a tool call errors, report that plainly rather than assuming success and moving on
-  anyway.
+- If subprocess.run times out, report that plainly rather than inventing a result.
 
 ## Verification
-- Confirm the transcript shows exactly 2 tool calls for this skill: one writing the script
-  (bash heredoc), one running it (plain bash, foreground).
+- Confirm the transcript shows exactly 2 tool calls for this skill: one writing the script,
+  one running it.
 - The printed output should contain all four section headers and five visibly different
-  member answers under STAGE 1, streamed live rather than appearing all at once at the end.
+  member answers under STAGE 1.
