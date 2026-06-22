@@ -76,7 +76,7 @@ def main():
         f"Response {labels[i]}:\n{answers[i][1]}" for i in range(len(answers))
     )
 
-    print(f"=== STAGE 2: Blind review + ranking (judge: {seats[2][1]}) ===", flush=True)
+    print("=== STAGE 2: Blind review + ranking ===", flush=True)
     review_prompt = (
         f"You are evaluating anonymized answers to this question:\n\nQuestion: {question}\n\n"
         f"{responses_block}\n\n"
@@ -92,7 +92,7 @@ def main():
         review = f"[FAILED: {e}]"
     print(review, flush=True)
 
-    print(f"=== STAGE 3: Chairman synthesis ({CHAIRMAN_MODEL}) ===", flush=True)
+    print("=== STAGE 3: Chairman synthesis ===", flush=True)
     synth_prompt = (
         f"Question: {question}\n\n{responses_block}\n\n"
         f"Peer review and ranking:\n{review}\n\n"

@@ -1,3 +1,36 @@
+---
+name: llm-council
+description: Convene a council of independent agents that answer a hard question separately, blind-review and rank each other's answers, then synthesize one vetted answer. Fights sycophancy and one-angle reasoning — use when The user wants a real answer instead of agreement. Two modes — default (5 local Qwen 2.5 lenses) and diverse (different local model families via Odysseus/Ollama). Trigger on "/llm-council", "convene the council", "run this through the council", "get a multi-model / second opinion", "stress-test this", "don't just agree with me", "argue both sides and tell me who's right", "is this actually a good idea". Use diverse mode on "diverse", "cross-architecture", "different architectures", "different families", "use diverse models", or a --diverse flag.
+status: published
+---
+
+## When to Use
+Trigger whenever the user mentions:
+- "/llm-council"
+- "convene the council"
+- "run this through the council"
+- "get a multi-model / second opinion"
+- "stress-test this"
+- "don't just agree with me"
+- "argue both sides and tell me who's right"
+- "is this actually a good idea"
+
+## Procedure
+
+This skill runs entirely through ONE pre-written script. You do not write or improvise any
+networking/orchestration code yourself — that was the source of every previous failure.
+Your job is two tool calls, full stop: write the script, then run it directly in the
+foreground. Never use a background/async marker for either step — the user needs to see
+each stage stream into the chat as it happens.
+
+**Step 1 — write the script.** Use your `bash` tool with a heredoc. Do NOT use a fenced
+`python` block for this step (a `python` block gets *executed*, not saved — pasting the
+script into one just runs it transiently and writes nothing to disk). Do NOT invent a
+command called `write_file` — it does not exist on this platform. Use exactly this form,
+overwriting the file every run:
+
+```bash
+cat > /tmp/council_pipeline.py << 'PYEOF'
 #!/usr/bin/env python3
 """
 council_pipeline.py - deterministic LLM-council pipeline against local Ollama.
@@ -76,7 +109,7 @@ def main():
         f"Response {labels[i]}:\n{answers[i][1]}" for i in range(len(answers))
     )
 
-    print(f"=== STAGE 2: Blind review + ranking (judge: {seats[2][1]}) ===", flush=True)
+    print("=== STAGE 2: Blind review + ranking ===", flush=True)
     review_prompt = (
         f"You are evaluating anonymized answers to this question:\n\nQuestion: {question}\n\n"
         f"{responses_block}\n\n"
@@ -92,7 +125,7 @@ def main():
         review = f"[FAILED: {e}]"
     print(review, flush=True)
 
-    print(f"=== STAGE 3: Chairman synthesis ({CHAIRMAN_MODEL}) ===", flush=True)
+    print("=== STAGE 3: Chairman synthesis ===", flush=True)
     synth_prompt = (
         f"Question: {question}\n\n{responses_block}\n\n"
         f"Peer review and ranking:\n{review}\n\n"
@@ -112,3 +145,51 @@ def main():
 
 if __name__ == "__main__":
     main()
+PYEOF
+echo "script written"
+```
+
+**Step 2 — run it directly, in the foreground.** A single plain `bash` tool call —
+NOT wrapped in `subprocess.run`, NOT prefixed with `#!bg` or any background marker. Running
+it directly like this means each stage's output streams into the visible chat as the script
+produces it, instead of all appearing at once at the end:
+
+```bash
+python3 /tmp/council_pipeline.py "<<THE FULL QUESTION TEXT>>" "<<default OR diverse>>"
+```
+
+Use `"diverse"` as the second argument only if the user asked for diverse/cross-architecture
+mode; otherwise use `"default"`.
+
+That's it. The script handles all five members, the blind review, and the chairman synthesis
+internally and prints clearly-labeled sections (`=== STAGE 1 ===`, `=== STAGE 2 ===`,
+`=== FINAL ANSWER ===`) as it goes. You don't need to parse or re-implement any of that —
+just read what it printed once it finishes.
+
+## Output (respect the anti-fluff rules)
+Take the text after `=== FINAL ANSWER ===` and present it as the answer, in your own words
+if it needs light cleanup, but don't alter its substance. Then add 3–5 lines of council notes
+pulled from the `=== STAGE 1 ===` and `=== STAGE 2 ===` sections: where the members agreed,
+the one real disagreement, the ranking, anything you'd push back on.
+
+If the script's stdout contains `[FAILED: ...]` for any seat, say so plainly rather than
+papering over it.
+
+## Pitfalls
+- Do not write your own version of the networking code. Use the script verbatim. Every prior
+  failure of this skill came from the model improvising HTTP calls live instead of running a
+  fixed script.
+- Do not paste the script into a fenced `python` block expecting that to save it — it will
+  just execute and do nothing persistent. Use the bash heredoc in Step 1.
+- Never use `#!bg`, `subprocess.run` with captured output, or any other background/buffering
+  mechanism for Step 2. The user wants to see each stage live.
+- Do not claim you "can't invoke other models due to environment constraints" — this is false.
+  If you're about to write that sentence, stop and run the script instead.
+- If a tool call errors, report that plainly rather than assuming success and moving on
+  anyway.
+
+## Verification
+- Confirm the transcript shows exactly 2 tool calls for this skill: one writing the script
+  (bash heredoc), one running it (plain bash, foreground).
+- The printed output should contain all four section headers and five visibly different
+  member answers under STAGE 1, streamed live rather than appearing all at once at the end.
