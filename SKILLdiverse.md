@@ -18,7 +18,7 @@ models — stop, this is the wrong skill. Use `llm-council` instead.
 
 ## Procedure
 
-A pre-installed script at `/app/data/council_pipeline.py` does all the work — it is NOT something
+A pre-installed script at `/tmp/council_pipeline.py` does all the work — it is NOT something
 you write or retype as part of this skill. Every previous version of this mode failed because
 the model tried to retype ~100 lines of Python live, badly, every single run. That step does
 not happen here. If the file is missing, you say so and stop; you do not recreate it.
@@ -29,10 +29,10 @@ Run this directly, in the foreground — one plain `bash` tool call, nothing wra
 no `#!bg` or other background marker, so each stage streams into the chat as it happens:
 
 ```bash
-python3 /app/data/council_pipeline.py "<<THE FULL QUESTION TEXT>>" diverse
+python3 /tmp/council_pipeline.py "<<THE FULL QUESTION TEXT>>" diverse
 ```
 
-If that errors with something like `can't open file '/app/data/council_pipeline.py'`, the script
+If that errors with something like `can't open file '/tmp/council_pipeline.py'`, the script
 isn't installed. Say so plainly and tell the user it needs to be (re)installed — do not
 attempt to write the file yourself.
 
